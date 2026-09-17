@@ -34,7 +34,7 @@ end entity settings;
 
 architecture behavioral of settings is
 
-  signal volume_reg : unsigned(3 downto 0) := (others => '0');
+  signal volume_reg : unsigned(3 downto 0) := (others => '1');
   signal crush_reg  : unsigned(3 downto 0) := (others => '0');
   signal down_reg   : unsigned(3 downto 0) := (others => '0');
   signal preset_reg : unsigned(3 downto 0) := (others => '0');
@@ -62,7 +62,7 @@ begin
     variable action_pressed : boolean;
   begin
     if rst_n = '0' then
-      volume_reg <= (others => '0');
+      volume_reg <= (others => '1');
       crush_reg  <= (others => '0');
       down_reg   <= (others => '0');
       preset_reg <= (others => '0');

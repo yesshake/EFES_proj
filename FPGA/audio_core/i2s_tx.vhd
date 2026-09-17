@@ -83,18 +83,18 @@ begin
         dac_data_next <= '0';
 
         if lrclk /= lrclk_q then
-          lrclk_q_next <= lrclk;
-
-          -- Capture the parallel sample for the slot about to start.
-          if valid_in = '1' then
-            sample_reg_next <= sample_in;
-          else
-            sample_reg_next <= (others => '0');
-          end if;
-
-          -- This falling edge represents the I2S delay position.
-          -- The MSB is transmitted on the next falling edge.
-          state_next <= SEND_MSB;
+            lrclk_q_next <= lrclk;
+        
+            if valid_in = '1' then
+                sample_reg_next <= sample_in;
+                dac_data_next   <= sample_in(15);
+            else
+                sample_reg_next <= (others => '0');
+                dac_data_next   <= '0';
+            end if;
+          
+            bit_index_next <= 14;
+            state_next     <= SEND_BITS;
         end if;
 
       ----------------------------------------------------------------
@@ -128,7 +128,16 @@ begin
 
             -- The current edge transmitted the old sample LSB.
             -- The next edge transmits the new sample MSB.
-            state_next <= SEND_MSB;
+            if valid_in = '1' then
+                sample_reg_next <= sample_in;
+                dac_data_next   <= sample_in(15);
+            else
+                sample_reg_next <= (others => '0');
+                dac_data_next   <= '0';
+            end if;
+            
+            bit_index_next <= 14;
+            state_next     <= SEND_BITS;
 
           else
             -- Wider slot: output padding until LRCLK changes.
@@ -160,20 +169,23 @@ begin
       when PAD =>
 
         dac_data_next <= '0';
-
+          
         if lrclk /= lrclk_q then
-          lrclk_q_next <= lrclk;
-
-          if valid_in = '1' then
-            sample_reg_next <= sample_in;
-          else
-            sample_reg_next <= (others => '0');
-          end if;
-
-          -- Current edge is the I2S delay position.
-          state_next <= SEND_MSB;
+            lrclk_q_next <= lrclk;
+        
+            if valid_in = '1' then
+                sample_reg_next <= sample_in;
+            
+                -- Put the MSB on the line NOW.
+                dac_data_next <= sample_in(15);
+            else
+                sample_reg_next <= (others => '0');
+                dac_data_next   <= '0';
+            end if;
+          
+            bit_index_next <= 14;
+            state_next     <= SEND_BITS;
         end if;
-
     end case;
   end process comb_proc;
 

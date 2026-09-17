@@ -18,14 +18,18 @@ package wm8731_pkg is
     std_logic_vector(15 downto 0);
 
   constant WM8731_CONFIG_WORDS : wm8731_config_array_t := (
-    x"1E00", -- R15: reset
-    x"1200", -- R9 : interface inactive during configuration
-    x"0805", -- R4 : microphone selected, boost enabled
-    x"0A08", -- R5 : ADC HPF enabled, codec DAC muted
-    x"0C59", -- R6 : ADC/microphone on; unused outputs and DAC off
-    x"0E42", -- R7 : master mode, 16-bit, standard I2S
-    x"1002", -- R8 : 48 kHz, normal mode, 384 fs
-    x"1201"  -- R9 : interface active
+      x"1E00", -- R15: reset
+      x"1200", -- R9 : interface inactive
+  
+      x"0017", -- R0 : Left line input, 0 dB, UNMUTED
+      x"0217", -- R1 : Right line input, 0 dB, UNMUTED
+  
+      x"0800", -- R4 : select LINE-IN
+      x"0A08", -- R5 : ADC HPF enabled, codec DAC muted
+      x"0C5A", -- R6 : LINE-IN + ADC powered
+      x"0E42", -- R7 : master, 16-bit, I2S
+      x"1002", -- R8 : 48 kHz, normal mode, 384 fs
+      x"1201"  -- R9 : interface active
   );
 
 end package wm8731_pkg;

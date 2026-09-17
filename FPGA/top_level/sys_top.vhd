@@ -19,29 +19,30 @@ entity sys_top is
     key : in std_logic_vector(3 downto 0);
     sw  : in std_logic_vector(9 downto 0);
 
-    hex0 : out std_logic_vector(6 downto 0);
-    hex1 : out std_logic_vector(6 downto 0);
-    hex2 : out std_logic_vector(6 downto 0);
-    hex3 : out std_logic_vector(6 downto 0);
-    hex4 : out std_logic_vector(6 downto 0);
-    hex5 : out std_logic_vector(6 downto 0);
+    hex0            : out std_logic_vector(6 downto 0);
+    hex1            : out std_logic_vector(6 downto 0);
+    hex2            : out std_logic_vector(6 downto 0);
+    hex3            : out std_logic_vector(6 downto 0);
+    hex4            : out std_logic_vector(6 downto 0);
+    hex5            : out std_logic_vector(6 downto 0);
 
-    i2c_sdat : inout std_logic;
-    i2c_sclk : inout std_logic;
+    i2c_sdat        : inout std_logic;
+    i2c_sclk        : inout std_logic;
 
     hps_i2c_control : out std_logic;
 
-    aud_xck     : out std_logic;
-    aud_bclk    : in  std_logic;
-    aud_adclrck : in  std_logic;
-    aud_adcdat  : in  std_logic;
+    aud_xck         : out std_logic;
+    aud_bclk        : in  std_logic;
+    aud_adclrck     : in  std_logic;
+    aud_adcdat      : in  std_logic;
 
-    gpio_bclk     : out std_logic;
-    gpio_lrclk    : out std_logic;
-    gpio_dac_data : out std_logic;
+    gpio_bclk       : out std_logic;
+    gpio_lrclk      : out std_logic;
+    gpio_dac_data   : out std_logic;
 
-    uart_rx : in  std_logic;
-    uart_tx : out std_logic
+    ledr            : out std_logic_vector(3 downto 0);
+    uart_rx         : in  std_logic;
+    uart_tx         : out std_logic
   );
 end entity sys_top;
 
@@ -266,6 +267,7 @@ begin
   ------------------------------------------------------------------
   -- UART physical receiver and transmitter.
   ------------------------------------------------------------------
+  ledr <= preset_index;
   U_uart_rx : entity work.uart_rx
     generic map (
       CLK_FREQ_HZ => 50_000_000,
@@ -370,26 +372,28 @@ begin
   -- at each LRCLK transition, repeating it in both output slots.
   process (aud_bclk, rst_n)
   begin
-    if rst_n = '0' then
-      tx_sample <= (others => '0');
-      tx_ready  <= '0';
-    elsif rising_edge(aud_bclk) then
-      if codec_done_bclk = '0' then
-        tx_sample <= (others => '0');
-        tx_ready  <= '0';
-      elsif effect_valid = '1' then
-        tx_sample <= effect_sample;
-        tx_ready  <= '1';
+      if rst_n = '0' then
+          tx_sample <= (others => '0');
+          tx_ready  <= '0';
+
+      elsif rising_edge(aud_bclk) then
+          if codec_done_bclk = '0' then
+              tx_sample <= (others => '0');
+              tx_ready  <= '0';
+
+          elsif effect_valid = '1' then
+              tx_sample <= effect_sample;
+              tx_ready  <= '1';
+          end if;
       end if;
-    end if;
   end process;
 
   U_i2s_tx : entity work.i2s_tx
     port map (
       bclk      => aud_bclk,
       lrclk     => aud_adclrck,
-      sample_in => tx_sample,
-      valid_in  => tx_ready,
+      sample_in => tx_sample, -- 
+      valid_in  => tx_ready, --  
       dac_data  => tx_serial_data
     );
 

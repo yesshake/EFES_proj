@@ -37,6 +37,7 @@ architecture Behavioral of UART_setting_interface is
 
   constant CMD_SAVE_PRESET : std_logic_vector(7 downto 0) := x"10";
   constant CMD_LOAD_PRESET : std_logic_vector(7 downto 0) := x"11";
+  constant CMD_PRESET_DATA : std_logic_vector(7 downto 0) := x"12";
 
   type state_t is (
     IDLE,
@@ -61,6 +62,14 @@ architecture Behavioral of UART_setting_interface is
   signal crush_reg  : std_logic_vector(3 downto 0);
   signal down_reg   : std_logic_vector(3 downto 0);
 
+  signal rx_active     : std_logic := '0';
+  signal rx_byte_index : natural range 1 to 4 := 1;
+
+  signal mcu_vol_reg   : std_logic_vector(3 downto 0) := (others => '0');
+  signal mcu_crush_reg : std_logic_vector(3 downto 0) := (others => '0');
+  signal mcu_down_reg  : std_logic_vector(3 downto 0) := (others => '0');
+  signal mcu_valid_reg : std_logic := '0';
+
   signal tx_data_reg  : std_logic_vector(7 downto 0);
   signal tx_start_reg : std_logic := '0';
 
@@ -70,11 +79,11 @@ begin
   tx_start <= tx_start_reg;
 
   -- UART receive is not implemented yet
-  mcu_vol_out   <= (others => '0');
-  mcu_crush_out <= (others => '0');
-  mcu_down_out  <= (others => '0');
-  mcu_rx_valid  <= '0';
-
+  mcu_vol_out   <= mcu_vol_reg;
+  mcu_crush_out <= mcu_crush_reg;
+  mcu_down_out  <= mcu_down_reg;
+  mcu_rx_valid  <= mcu_valid_reg;
+  
   process (clk, rst_n)
   begin
     if rst_n = '0' then
@@ -88,11 +97,57 @@ begin
       crush_reg  <= (others => '0');
       down_reg   <= (others => '0');
 
+      rx_active      <= '0';
+      rx_byte_index  <= 1;
+      mcu_vol_reg    <= (others => '0');
+      mcu_crush_reg  <= (others => '0');
+      mcu_down_reg   <= (others => '0');
+      mcu_valid_reg  <= '0';
+
       tx_data_reg  <= (others => '0');
       tx_start_reg <= '0';
 
     elsif rising_edge(clk) then
+
       tx_start_reg <= '0';
+      mcu_valid_reg <= '0';
+
+      if rx_valid = '1' then
+        if rx_active = '0' then
+
+          -- STM32 response starts with 0x12
+          if rx_data = CMD_PRESET_DATA then
+            rx_active     <= '1';
+            rx_byte_index <= 1;
+          end if;
+
+        else
+          case rx_byte_index is
+
+            when 1 =>
+              -- preset ID returned by STM32
+              -- currently just consume it
+              rx_byte_index <= 2;
+
+            when 2 =>
+              mcu_vol_reg   <= rx_data(3 downto 0);
+              rx_byte_index <= 3;
+
+            when 3 =>
+              mcu_crush_reg <= rx_data(3 downto 0);
+              rx_byte_index <= 4;
+
+            when 4 =>
+              mcu_down_reg  <= rx_data(3 downto 0);
+
+              -- Tell settings.vhd to apply all three values
+              mcu_valid_reg <= '1';
+              rx_active     <= '0';
+              rx_byte_index <= 1;
+
+          end case;
+        end if;
+      end if;
 
       case state is
         when IDLE =>
