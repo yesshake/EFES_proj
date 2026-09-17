@@ -87,3 +87,79 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# ── Unreadable / binary reports ──────────────────────
+*.rpt
+*.summary
+*.pin
+*.fit.smsg
+*.sta.smsg
+*.asm.smsg
+*.flow.smsg
+*.merge.smsg
+*.qarlog
+
+# ── Log files ────────────────────────────────────────
+*.log
+qmegawiz_errors_log.txt
+*.jdi.log
+
+# ── IDE / editor artifacts ───────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln
+*.csproj
+
+# ── Quartus / Platform Designer generated files ──────
+*.qdf
+*.csf
+*.dpf
+*.spd
+*.ppf
+*.sip
+*.bsf
+*.cmp
+*.qip
+*.sopcinfo
+*.html
+*_generation.rpt
+greybox_tmp/
+*_bb.vhd
+*_inst.vhd
+*.ppf
+*.cnf.bak*
+
+# ── IP / Qsys / Platform Designer output ────────────
+**/*_sim/
+**/*_gen/
+*.qgsm
+*.qsys
+
+# ── Simulation leftovers ────────────────────────────
+*.vstf
+*.psf
+*.mpf
+*.cr.mti
+*.vcd
+*.ghw
+*.fst
+
+# ── Vivado / Xilinx (if ever used) ──────────────────
+*.xpr
+*.runs/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.sim/
+.Xil/
+
+# ── Misc EDA temporaries ────────────────────────────
+*.drc
+*.bgn
+*.bit
+*.ncd
+*.ngd
+*.pcf
+*.xdl
