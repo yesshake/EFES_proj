@@ -1,15 +1,12 @@
--- ================================================================
--- FPGA mono audio processor
+-- sys_top: FPGA mono audio processor
 --
--- clk_50m domain:
---   PLL status, WM8731 I2C configuration, user settings, UART and HEX
---
--- aud_bclk domain:
---   I2S receive, audio effects, mono sample hold and I2S transmit
--- ================================================================
+-- clk_50m: PLL, I2C config, settings, UART, HEX
+-- aud_bclk: I2S rx, effects, I2S tx
 
 library ieee;
 use ieee.std_logic_1164.all;
+
+use work.efes_pkg.all;
 
 entity sys_top is
   port (
@@ -19,12 +16,12 @@ entity sys_top is
     key : in std_logic_vector(3 downto 0);
     sw  : in std_logic_vector(9 downto 0);
 
-    hex0            : out std_logic_vector(6 downto 0);
-    hex1            : out std_logic_vector(6 downto 0);
-    hex2            : out std_logic_vector(6 downto 0);
-    hex3            : out std_logic_vector(6 downto 0);
-    hex4            : out std_logic_vector(6 downto 0);
-    hex5            : out std_logic_vector(6 downto 0);
+    hex0            : out seven_seg_t;
+    hex1            : out seven_seg_t;
+    hex2            : out seven_seg_t;
+    hex3            : out seven_seg_t;
+    hex4            : out seven_seg_t;
+    hex5            : out seven_seg_t;
 
     i2c_sdat        : inout std_logic;
     i2c_sclk        : inout std_logic;
@@ -57,9 +54,7 @@ architecture rtl of sys_top is
     );
   end component;
 
-  ------------------------------------------------------------------
-  -- Clock and codec-control signals: clk_50m domain.
-  ------------------------------------------------------------------
+  -- clk_50m domain: clock and codec control
   signal audio_mclk      : std_logic;
   signal pll_reset       : std_logic;
   signal pll_locked      : std_logic;
@@ -70,68 +65,58 @@ architecture rtl of sys_top is
   signal codec_config_done : std_logic;
   signal codec_i2c_error   : std_logic;
 
-  ------------------------------------------------------------------
-  -- Codec status crossing into aud_bclk.
-  ------------------------------------------------------------------
+  -- codec done flag synced into aud_bclk
   signal codec_done_meta : std_logic := '0';
   signal codec_done_bclk : std_logic := '0';
 
-  ------------------------------------------------------------------
-  -- Audio datapath: aud_bclk domain.
-  ------------------------------------------------------------------
-  signal rx_sample         : std_logic_vector(15 downto 0);
+  -- audio datapath (aud_bclk domain)
+  signal rx_sample         : audio_sample_t;
   signal rx_valid          : std_logic;
   signal selected_rx_valid : std_logic;
 
-  signal effect_sample : std_logic_vector(15 downto 0);
+  signal effect_sample : audio_sample_t;
   signal effect_valid  : std_logic;
 
-  signal tx_sample      : std_logic_vector(15 downto 0) := (others => '0');
+  signal tx_sample      : audio_sample_t := (others => '0');
   signal tx_ready       : std_logic := '0';
   signal tx_serial_data : std_logic;
 
-  ------------------------------------------------------------------
-  -- User settings and UART: clk_50m domain.
-  ------------------------------------------------------------------
+  -- user settings and UART (clk_50m domain)
   signal btn_up_clean     : std_logic;
   signal btn_down_clean   : std_logic;
   signal btn_action_clean : std_logic;
 
-  signal setting_volume : std_logic_vector(3 downto 0);
-  signal setting_crush  : std_logic_vector(3 downto 0);
-  signal setting_down   : std_logic_vector(3 downto 0);
-  signal preset_index   : std_logic_vector(3 downto 0);
+  signal setting_volume : efx_param_t;
+  signal setting_crush  : efx_param_t;
+  signal setting_down   : efx_param_t;
+  signal preset_index   : preset_id_t;
 
   signal save_strobe : std_logic;
   signal load_strobe : std_logic;
 
-  signal uart_tx_data  : std_logic_vector(7 downto 0);
+  signal uart_tx_data  : uart_byte_t;
   signal uart_tx_start : std_logic;
   signal uart_tx_busy  : std_logic;
 
-  signal uart_rx_byte  : std_logic_vector(7 downto 0);
+  signal uart_rx_byte  : uart_byte_t;
   signal uart_rx_valid : std_logic;
 
-  signal mcu_volume   : std_logic_vector(3 downto 0);
-  signal mcu_crush    : std_logic_vector(3 downto 0);
-  signal mcu_down     : std_logic_vector(3 downto 0);
+  signal mcu_volume   : efx_param_t;
+  signal mcu_crush    : efx_param_t;
+  signal mcu_down     : efx_param_t;
   signal mcu_rx_valid : std_logic;
 
-  ------------------------------------------------------------------
-  -- Slowly-changing setting buses crossing into aud_bclk.
-  ------------------------------------------------------------------
-  signal volume_meta : std_logic_vector(3 downto 0) := (others => '0');
-  signal volume_bclk : std_logic_vector(3 downto 0) := (others => '0');
-  signal crush_meta  : std_logic_vector(3 downto 0) := (others => '0');
-  signal crush_bclk  : std_logic_vector(3 downto 0) := (others => '0');
-  signal down_meta   : std_logic_vector(3 downto 0) := (others => '0');
-  signal down_bclk   : std_logic_vector(3 downto 0) := (others => '0');
+  -- CDC: settings into aud_bclk (slowly changing, per-bit sync OK)
+  signal volume_meta : efx_param_t := (others => '0');
+  signal volume_bclk : efx_param_t := (others => '0');
+  signal crush_meta  : efx_param_t := (others => '0');
+  signal crush_bclk  : efx_param_t := (others => '0');
+  signal down_meta   : efx_param_t := (others => '0');
+  signal down_bclk   : efx_param_t := (others => '0');
 
 begin
 
-  ------------------------------------------------------------------
-  -- Fixed board-level connections.
-  ------------------------------------------------------------------
+  -- board-level connections
   hps_i2c_control <= '0';
 
   aud_xck         <= audio_mclk;
@@ -139,9 +124,7 @@ begin
   gpio_lrclk      <= aud_adclrck;
   gpio_dac_data   <= tx_serial_data when codec_done_bclk = '1' else '0';
 
-  ------------------------------------------------------------------
-  -- Generate the WM8731 master clock.
-  ------------------------------------------------------------------
+  -- WM8731 master clock PLL
   pll_reset <= not rst_n;
 
   U_audio_pll : audio_pll
@@ -165,9 +148,7 @@ begin
 
   codec_reset_n <= rst_n and pll_locked_sync;
 
-  ------------------------------------------------------------------
-  -- WM8731 configuration.
-  ------------------------------------------------------------------
+  -- WM8731 I2C configuration
   U_i2c_master : entity work.i2c_master
     generic map (
       CLK_FREQ_HZ      => 50_000_000,
@@ -194,10 +175,7 @@ begin
     end if;
   end process;
 
-  ------------------------------------------------------------------
-  -- Button debouncing and setting acquisition.
-  -- Buttons are active-low; edge handling is performed by settings.
-  ------------------------------------------------------------------
+  -- button debouncing (active-low keys)
   U_debounce_up : entity work.debouncer
     port map (
       clk        => clk_50m,
@@ -239,10 +217,7 @@ begin
       load_strobe  => load_strobe
     );
 
-  ------------------------------------------------------------------
-  -- Decimal setting displays.
-  -- HEX1:HEX0 = volume, HEX3:HEX2 = crush, HEX5:HEX4 = downsample.
-  ------------------------------------------------------------------
+  -- HEX displays: volume, crush, downsample
   U_hex_volume : entity work.hex_display
     port map (
       value    => setting_volume,
@@ -264,9 +239,7 @@ begin
       hex_ones => hex4
     );
 
-  ------------------------------------------------------------------
-  -- UART physical receiver and transmitter.
-  ------------------------------------------------------------------
+  -- UART
   ledr <= preset_index;
   U_uart_rx : entity work.uart_rx
     generic map (
@@ -316,11 +289,7 @@ begin
       tx_line  => uart_tx
     );
 
-  ------------------------------------------------------------------
-  -- Synchronize slowly-changing effect controls into aud_bclk.
-  -- Per-bit two-stage synchronization is sufficient for these manual
-  -- controls because they remain stable for many audio clock cycles.
-  ------------------------------------------------------------------
+  -- sync effect controls into aud_bclk
   process (aud_bclk, rst_n)
   begin
     if rst_n = '0' then
@@ -340,9 +309,7 @@ begin
     end if;
   end process;
 
-  ------------------------------------------------------------------
-  -- Mono audio datapath.
-  ------------------------------------------------------------------
+  -- mono audio datapath
   U_i2s_rx : entity work.i2s_rx
     port map (
       bclk       => aud_bclk,
@@ -352,8 +319,7 @@ begin
       valid      => rx_valid
     );
 
-  -- This uses the left I2S slot. The receiver asserts rx_valid while
-  -- LRCLK still identifies the slot whose sample has just completed.
+  -- left slot only (LRCLK=0 during valid pulse from receiver)
   selected_rx_valid <= rx_valid when aud_adclrck = '0' else '0';
 
   U_sample_effects : entity work.sample_effects
@@ -368,8 +334,7 @@ begin
       valid_out  => effect_valid
     );
 
-  -- Hold the processed mono sample. i2s_tx loads the same held value
-  -- at each LRCLK transition, repeating it in both output slots.
+  -- hold processed sample; i2s_tx picks it up at each LRCLK edge
   process (aud_bclk, rst_n)
   begin
       if rst_n = '0' then
@@ -392,8 +357,8 @@ begin
     port map (
       bclk      => aud_bclk,
       lrclk     => aud_adclrck,
-      sample_in => tx_sample, -- 
-      valid_in  => tx_ready, --  
+      sample_in => tx_sample,
+      valid_in  => tx_ready,
       dac_data  => tx_serial_data
     );
 

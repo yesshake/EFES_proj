@@ -1,16 +1,17 @@
--- ================================================================
--- I2S transmitter module
--- ================================================================
+-- I2S transmitter — serializes 16-bit mono sample into both I2S slots.
+-- Clocked on falling BCLK so data is stable before the receiver's rising edge.
 
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.efes_pkg.all;
+
 entity i2s_tx is
   port (
     bclk      : in  std_logic;
     lrclk     : in  std_logic;
-    sample_in : in  std_logic_vector(15 downto 0);
+    sample_in : in  audio_sample_t;
     dac_data  : out std_logic;
 
     -- Internal FPGA valid logic
@@ -30,23 +31,20 @@ architecture rtl of i2s_tx is
   -- registered current values
   signal state        : tx_state_t := SYNC;
   signal lrclk_q      : std_logic := '0';
-  signal sample_reg   : std_logic_vector(15 downto 0) := (others => '0');
-  signal bit_index    : integer range 0 to 14 := 14;
+  signal sample_reg   : audio_sample_t := (others => '0');
+  signal bit_index    : integer range 0 to AUDIO_SAMPLE_WIDTH-2 := AUDIO_SAMPLE_WIDTH-2;
   signal dac_data_q   : std_logic := '0';
 
   -- combinational next values
   signal state_next      : tx_state_t;
   signal lrclk_q_next     : std_logic;
-  signal sample_reg_next  : std_logic_vector(15 downto 0);
-  signal bit_index_next   : integer range 0 to 14;
+  signal sample_reg_next  : audio_sample_t;
+  signal bit_index_next   : integer range 0 to AUDIO_SAMPLE_WIDTH-2;
   signal dac_data_next    : std_logic;
 
 begin
 
-  ----------------------------------------------------------------
-  -- Register process: sole clocked process, no combinational
-  -- logic other than passing *_next signals through to state.
-  ----------------------------------------------------------------
+  -- state registers (falling-edge BCLK)
   reg_proc : process (bclk)
   begin
     if falling_edge(bclk) then
@@ -58,15 +56,12 @@ begin
     end if;
   end process reg_proc;
 
-  ----------------------------------------------------------------
-  -- Combinational process: computes next state/outputs from the
-  -- current state and inputs. No clock, no reset here.
-  ----------------------------------------------------------------
+  -- next-state logic
   comb_proc : process (state, lrclk_q, sample_reg, bit_index,
                         dac_data_q, lrclk, sample_in, valid_in)
   begin
 
-    -- Defaults: hold current value unless overridden below.
+    -- defaults: hold current value
     state_next      <= state;
     lrclk_q_next     <= lrclk_q;
     sample_reg_next  <= sample_reg;
@@ -75,9 +70,7 @@ begin
 
     case state is
 
-      ----------------------------------------------------------------
-      -- Wait for synchronization with LRCLK.
-      ----------------------------------------------------------------
+      -- wait for first LRCLK edge
       when SYNC =>
 
         dac_data_next <= '0';
@@ -87,36 +80,31 @@ begin
         
             if valid_in = '1' then
                 sample_reg_next <= sample_in;
-                dac_data_next   <= sample_in(15);
+                dac_data_next   <= sample_in(AUDIO_SAMPLE_WIDTH-1);
             else
                 sample_reg_next <= (others => '0');
                 dac_data_next   <= '0';
             end if;
           
-            bit_index_next <= 14;
+            bit_index_next <= AUDIO_SAMPLE_WIDTH-2;
             state_next     <= SEND_BITS;
         end if;
 
-      ----------------------------------------------------------------
-      -- First falling edge after the LRCLK transition.
-      ----------------------------------------------------------------
+      -- output MSB on the first edge after LRCLK transition
       when SEND_MSB =>
 
-        dac_data_next  <= sample_reg(15);
-        bit_index_next <= 14;
+        dac_data_next  <= sample_reg(AUDIO_SAMPLE_WIDTH-1);
+        bit_index_next <= AUDIO_SAMPLE_WIDTH-2;
         state_next      <= SEND_BITS;
 
-      ----------------------------------------------------------------
-      -- Transmit bits 14 down to 0.
-      ----------------------------------------------------------------
+      -- shift out bits 14..0
       when SEND_BITS =>
 
         dac_data_next <= sample_reg(bit_index);
 
         if bit_index = 0 then
 
-          -- With a 16-bit slot, LRCLK may change while the LSB is
-          -- being transmitted.
+          -- 16-bit slot: LRCLK might change on the last bit
           if lrclk /= lrclk_q then
             lrclk_q_next <= lrclk;
 
@@ -126,27 +114,25 @@ begin
               sample_reg_next <= (others => '0');
             end if;
 
-            -- The current edge transmitted the old sample LSB.
-            -- The next edge transmits the new sample MSB.
+            -- old sample LSB just went out; start the new sample MSB
             if valid_in = '1' then
                 sample_reg_next <= sample_in;
-                dac_data_next   <= sample_in(15);
+                dac_data_next   <= sample_in(AUDIO_SAMPLE_WIDTH-1);
             else
                 sample_reg_next <= (others => '0');
                 dac_data_next   <= '0';
             end if;
             
-            bit_index_next <= 14;
+            bit_index_next <= AUDIO_SAMPLE_WIDTH-2;
             state_next     <= SEND_BITS;
 
           else
-            -- Wider slot: output padding until LRCLK changes.
+            -- wider slot: pad with zeros until next LRCLK edge
             state_next <= PAD;
           end if;
 
         else
-          -- An early LRCLK transition means the external slot is
-          -- shorter than expected. Resynchronize to the new slot.
+          -- early LRCLK: slot shorter than expected, resync
           if lrclk /= lrclk_q then
             lrclk_q_next <= lrclk;
 
@@ -163,9 +149,7 @@ begin
           end if;
         end if;
 
-      ----------------------------------------------------------------
-      -- Send zero padding until the next slot begins.
-      ----------------------------------------------------------------
+      -- zero padding until next slot
       when PAD =>
 
         dac_data_next <= '0';
@@ -176,20 +160,19 @@ begin
             if valid_in = '1' then
                 sample_reg_next <= sample_in;
             
-                -- Put the MSB on the line NOW.
-                dac_data_next <= sample_in(15);
+                -- MSB goes out immediately
+                dac_data_next <= sample_in(AUDIO_SAMPLE_WIDTH-1);
             else
                 sample_reg_next <= (others => '0');
                 dac_data_next   <= '0';
             end if;
           
-            bit_index_next <= 14;
+            bit_index_next <= AUDIO_SAMPLE_WIDTH-2;
             state_next     <= SEND_BITS;
         end if;
     end case;
   end process comb_proc;
 
-  -- Output
   dac_data <= dac_data_q;
 
 end architecture rtl;

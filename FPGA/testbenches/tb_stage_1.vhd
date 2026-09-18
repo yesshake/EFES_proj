@@ -1,22 +1,15 @@
--- ============================================================================
--- Stage-1 system testbench
+-- Stage 1 system testbench
 --
--- Checks:
---   * the generated codec MCLK is approximately 18.432 MHz;
---   * the WM8731 I2C write sequence contains the expected eight words;
---   * the codec model ACKs all three bytes of every I2C transaction;
---   * BCLK and LRCLK are forwarded to the external amplifier interface;
---   * only the LRCLK-low input slot is retained;
---   * the retained mono sample is transmitted in both I2S output slots.
+-- Checks MCLK frequency, I2C config sequence, BCLK/LRCLK forwarding,
+-- left-slot-only capture, and mono sample output in both I2S slots.
 --
--- The WM8731 model below is intentionally minimal. It implements only the
--- fixed-purpose behavior needed for Stage 1: write ACKs and I2S master clocks.
--- ============================================================================
+-- The WM8731 model is minimal: write ACKs and I2S master clocks only.
 
 library ieee;
 use ieee.std_logic_1164.all;
 
 use work.wm8731_pkg.all;
+use work.efes_pkg.all;
 
 entity tb_stage_1 is
 end entity tb_stage_1;
@@ -35,9 +28,9 @@ architecture sim of tb_stage_1 is
   signal key : std_logic_vector(3 downto 0) := (others => '1');
   signal sw  : std_logic_vector(9 downto 0) := (others => '0');
 
-  signal hex0 : std_logic_vector(6 downto 0);
-  signal hex1 : std_logic_vector(6 downto 0);
-  signal hex2 : std_logic_vector(6 downto 0);
+  signal hex0 : seven_seg_t;
+  signal hex1 : seven_seg_t;
+  signal hex2 : seven_seg_t;
 
   signal i2c_sdat : std_logic := 'H';
   signal i2c_sclk : std_logic := 'H';
@@ -94,7 +87,7 @@ architecture sim of tb_stage_1 is
     signal lrclk      : out std_logic;
     signal serial_dat : out std_logic;
     constant channel  : in  std_logic;
-    constant sample   : in  std_logic_vector(15 downto 0)
+    constant sample   : in  audio_sample_t
   ) is
   begin
     -- Change LRCLK after a rising edge so it is stable at the following
@@ -301,8 +294,8 @@ end process;
     -- to cross into the newly started BCLK domain.
     wait for 20 us;
 
-    -- LRCLK low is the selected microphone slot. Right-slot values are made
-    -- deliberately different so an accidental stereo capture is detected.
+    -- LRCLK low = left slot (the one we keep). Right slot values
+    -- are deliberately different so an accidental stereo capture is detected.
     send_i2s_slot(aud_bclk, aud_adclrck, aud_adcdat, '1', x"5AA5");
     send_i2s_slot(aud_bclk, aud_adclrck, aud_adcdat, '0', x"1234");
     send_i2s_slot(aud_bclk, aud_adclrck, aud_adcdat, '1', x"DEAD");
@@ -319,7 +312,7 @@ end process;
   -- transition is the I2S delay; the following sixteen edges carry the sample.
   amplifier_data_check : process
     variable slot_number    : natural := 0;
-    variable decoded_sample : std_logic_vector(15 downto 0);
+    variable decoded_sample : audio_sample_t;
   begin
     wait until i2c_config_complete = '1';
 

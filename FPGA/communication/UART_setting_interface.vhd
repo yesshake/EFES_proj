@@ -1,43 +1,41 @@
--- ================================================================
--- 
--- ================================================================
-
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+use work.efes_pkg.all;
 
 entity UART_setting_interface is
   port (
     clk   : in std_logic;
     rst_n : in std_logic;
 
-    rx_data  : in std_logic_vector(7 downto 0);
+    rx_data  : in uart_byte_t;
     rx_valid : in std_logic;
 
     save_strobe   : in std_logic;
     load_strobe   : in std_logic;
-    preset_idx_in : in std_logic_vector(3 downto 0);
+    preset_idx_in : in preset_id_t;
 
-    efx_vol_in   : in std_logic_vector(3 downto 0);
-    efx_crush_in : in std_logic_vector(3 downto 0);
-    efx_down_in  : in std_logic_vector(3 downto 0);
+    efx_vol_in   : in efx_param_t;
+    efx_crush_in : in efx_param_t;
+    efx_down_in  : in efx_param_t;
 
-    tx_data  : out std_logic_vector(7 downto 0);
+    tx_data  : out uart_byte_t;
     tx_start : out std_logic;
     tx_busy  : in std_logic;
 
-    mcu_vol_out   : out std_logic_vector(3 downto 0);
-    mcu_crush_out : out std_logic_vector(3 downto 0);
-    mcu_down_out  : out std_logic_vector(3 downto 0);
+    mcu_vol_out   : out efx_param_t;
+    mcu_crush_out : out efx_param_t;
+    mcu_down_out  : out efx_param_t;
     mcu_rx_valid  : out std_logic
   );
 end entity UART_setting_interface;
 
 architecture Behavioral of UART_setting_interface is
 
-  constant CMD_SAVE_PRESET : std_logic_vector(7 downto 0) := x"10";
-  constant CMD_LOAD_PRESET : std_logic_vector(7 downto 0) := x"11";
-  constant CMD_PRESET_DATA : std_logic_vector(7 downto 0) := x"12";
+  constant CMD_SAVE_PRESET : uart_byte_t := x"10";
+  constant CMD_LOAD_PRESET : uart_byte_t := x"11";
+  constant CMD_PRESET_DATA : uart_byte_t := x"12";
 
   type state_t is (
     IDLE,
@@ -57,20 +55,20 @@ architecture Behavioral of UART_setting_interface is
   signal byte_index : natural range 0 to 4 := 0;
   signal last_index : natural range 1 to 4 := 1;
 
-  signal preset_reg : std_logic_vector(3 downto 0);
-  signal volume_reg : std_logic_vector(3 downto 0);
-  signal crush_reg  : std_logic_vector(3 downto 0);
-  signal down_reg   : std_logic_vector(3 downto 0);
+  signal preset_reg : preset_id_t;
+  signal volume_reg : efx_param_t;
+  signal crush_reg  : efx_param_t;
+  signal down_reg   : efx_param_t;
 
   signal rx_active     : std_logic := '0';
   signal rx_byte_index : natural range 1 to 4 := 1;
 
-  signal mcu_vol_reg   : std_logic_vector(3 downto 0) := (others => '0');
-  signal mcu_crush_reg : std_logic_vector(3 downto 0) := (others => '0');
-  signal mcu_down_reg  : std_logic_vector(3 downto 0) := (others => '0');
+  signal mcu_vol_reg   : efx_param_t := (others => '0');
+  signal mcu_crush_reg : efx_param_t := (others => '0');
+  signal mcu_down_reg  : efx_param_t := (others => '0');
   signal mcu_valid_reg : std_logic := '0';
 
-  signal tx_data_reg  : std_logic_vector(7 downto 0);
+  signal tx_data_reg  : uart_byte_t;
   signal tx_start_reg : std_logic := '0';
 
 begin
@@ -78,7 +76,7 @@ begin
   tx_data  <= tx_data_reg;
   tx_start <= tx_start_reg;
 
-  -- UART receive is not implemented yet
+
   mcu_vol_out   <= mcu_vol_reg;
   mcu_crush_out <= mcu_crush_reg;
   mcu_down_out  <= mcu_down_reg;

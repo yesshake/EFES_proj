@@ -2,6 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.efes_pkg.all;
+
 entity uart_rx is
   generic (
     CLK_FREQ_HZ : positive := 50_000_000;
@@ -11,7 +13,7 @@ entity uart_rx is
     clk        : in  std_logic;
     rst_n      : in  std_logic;
     uart_rx_i  : in  std_logic;
-    data_out   : out std_logic_vector(7 downto 0);
+    data_out   : out uart_byte_t;
     data_valid : out std_logic
   );
 end entity uart_rx;
@@ -31,7 +33,7 @@ architecture rtl of uart_rx is
   signal state       : state_t := IDLE;
   signal clock_count : natural range 0 to CLKS_PER_BIT - 1 := 0;
   signal bit_index   : natural range 0 to 7 := 0;
-  signal data_reg    : std_logic_vector(7 downto 0) := (others => '0');
+  signal data_reg    : uart_byte_t := (others => '0');
 
   -- Synchronize the asynchronous UART input
   signal rx_meta : std_logic := '1';

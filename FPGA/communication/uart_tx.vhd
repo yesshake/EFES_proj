@@ -1,10 +1,8 @@
--- ================================================================
--- 
--- ================================================================
-
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+use work.efes_pkg.all;
 
 entity uart_tx is
   generic (
@@ -15,7 +13,7 @@ entity uart_tx is
     clk : in std_logic;
     rst_n : in std_logic;
 
-    tx_data : in std_logic_vector(7 downto 0);
+    tx_data : in uart_byte_t;
     tx_start : in std_logic;
 
     tx_busy : out std_logic;
@@ -38,7 +36,7 @@ architecture Behavioral of uart_tx is
 
   signal clock_count : natural range 0 to CLKS_PER_BIT - 1 := 0;
   signal bit_index   : natural range 0 to 7 := 0;
-  signal data_reg    : std_logic_vector(7 downto 0) := (others => '0');
+  signal data_reg    : uart_byte_t := (others => '0');
 
   signal tx_reg      : std_logic := '1';
   signal busy_reg    : std_logic := '0';

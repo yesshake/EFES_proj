@@ -1,8 +1,8 @@
--- WM8731 microphone-to-MAX98357A direct I2S smoke test.
+-- WM8731 LINE-IN to MAX98357A direct I2S smoke test.
 --
--- This top level deliberately bypasses i2s_rx, sample_effects, and i2s_tx.
--- It only starts/configures the WM8731 and forwards the codec's raw ADC
--- I2S stream to the external amplifier.
+-- Bypasses i2s_rx, sample_effects, and i2s_tx.
+-- Only configures the WM8731 and forwards the raw ADC I2S stream
+-- to the external amplifier.
 
 library ieee;
 use ieee.std_logic_1164.all;

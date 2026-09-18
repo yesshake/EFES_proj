@@ -1,15 +1,6 @@
--- ============================================================================
--- WM8731 configuration controller
---
--- This controller performs the fixed startup sequence stored in wm8731_pkg.
--- Each configuration word is transferred as:
---
---   START
---   WM8731_WRITE_BYTE
---   control_word(15 downto 8)
---   control_word(7 downto 0)
---   STOP
--- ============================================================================
+-- WM8731 I2C configuration controller
+-- Sends the startup register sequence from wm8731_pkg
+-- Each config word is a 3 byte I2C write: START, address, high byte, low byte, STOP
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -19,11 +10,10 @@ use work.wm8731_pkg.all;
 entity i2c_master is
   generic (
     CLK_FREQ_HZ      : positive := 50_000_000;
-    I2C_FREQ_HZ      : positive := 100_000; -- CLK_FREQ_HZ must be at least four times I2C_FREQ_HZ
+    I2C_FREQ_HZ      : positive := 100_000;
     STARTUP_DELAY_MS : positive := 10
   );
   port (
-	 -- Module clock and reset
     clk       : in    std_logic;
     rst_n     : in    std_logic;
 	 
@@ -38,7 +28,7 @@ entity i2c_master is
 end entity i2c_master;
 
 architecture rtl of i2c_master is
-  -- Used to force positive value to division results that will later be used as counter upper bounds
+  -- floor to 1 for counter bounds
   function max_one(value : natural) return positive is
   begin
     if value = 0 then
@@ -47,10 +37,10 @@ architecture rtl of i2c_master is
     return value;
   end function;
 
-  -- Number of system clock cycles within quarter of one clock cycle of i2c scl
+  -- quarter period of one SCL cycle, in system clock ticks
   constant QUARTER_CYCLES : positive := max_one(CLK_FREQ_HZ / (4 * I2C_FREQ_HZ));
 
-  -- Startup delay measured in quarter I2C period ticks.
+  -- startup delay in quarter period ticks
   constant STARTUP_TICKS : positive := max_one((4 * I2C_FREQ_HZ * STARTUP_DELAY_MS) / 1000);
 
   type state_t is (
@@ -69,7 +59,7 @@ architecture rtl of i2c_master is
   signal divider_count : natural range 0 to QUARTER_CYCLES - 1 := 0;
   signal startup_count : natural range 0 to STARTUP_TICKS - 1 := 0;
 
-  -- Quarter period phase of i2c period
+  -- SCL phase within one bit period
   signal phase : natural range 0 to 3 := 0;
 
   signal config_index : natural range 0 to WM8731_CONFIG_WORDS'length - 1 := 0;
@@ -78,7 +68,7 @@ architecture rtl of i2c_master is
 
   signal tx_byte : std_logic_vector(7 downto 0) := WM8731_WRITE_BYTE;
 
-  -- Open-drain controls: '1' means actively pull the line low.
+  -- open-drain: '1' = pull low, '0' = release (pulled up externally)
   signal scl_drive_low : std_logic := '0';
   signal sda_drive_low : std_logic := '0';
 
@@ -90,7 +80,7 @@ architecture rtl of i2c_master is
 
 begin
 
-  -- Open-drain pin driving. Pull to '0' or release to high impedance to be pulled up
+  -- open-drain driving
   i2c_sclk <= '0' when scl_drive_low = '1' else 'Z';
   i2c_sdat <= '0' when sda_drive_low = '1' else 'Z';
 
@@ -120,7 +110,7 @@ begin
       ack_error_reg <= '0';
 
     elsif rising_edge(clk) then
-      if divider_count = QUARTER_CYCLES - 1 then	-- end of quarter cycle
+      if divider_count = QUARTER_CYCLES - 1 then
         divider_count <= 0;
 
         case state is
@@ -131,8 +121,6 @@ begin
             done_reg      <= '0';
             ack_error_reg <= '0';
             error_pending <= '0';
-
-				-- Check if startup wait is complete
             if startup_count = STARTUP_TICKS - 1 then
               startup_count <= 0;
               config_index  <= 0;
@@ -145,25 +133,25 @@ begin
           when START_CONDITION =>
             case phase is
               when 0 =>
-                -- Release both lines before START
+                -- release both lines
                 scl_drive_low <= '0';
                 sda_drive_low <= '0';
                 phase         <= 1;
 
               when 1 =>
-                -- START: SDA falls while SCL is released high
+                -- START condition: SDA falls while SCL high
                 scl_drive_low <= '0';
                 sda_drive_low <= '1';
                 phase         <= 2;
 
               when 2 =>
-                -- Pull SCL low before changing data bits.
+                -- pull SCL low before data bits
                 scl_drive_low <= '1';
                 sda_drive_low <= '1';
                 phase         <= 3;
 
               when others =>
-				    -- On phase 3 transmit i2c slave address while driving scl low
+                -- load address byte and start sending
                 byte_index <= 0;
                 bit_index  <= 7;
                 tx_byte    <= WM8731_WRITE_BYTE;
@@ -174,7 +162,7 @@ begin
           when SEND_BYTE =>
             case phase is
               when 0 =>
-                -- Set SDA only while SCL is low.
+                -- set SDA while SCL is low
                 scl_drive_low <= '1';
 
                 if tx_byte(bit_index) = '0' then
@@ -186,20 +174,20 @@ begin
                 phase <= 1;
 
               when 1 =>
-                -- Release SCL; the target samples the data bit.
+                -- release SCL; target samples the bit
                 scl_drive_low <= '0';
                 phase         <= 2;
 
               when 2 =>
-                -- Hold SDA unchanged during the SCL high phase.
+                -- SDA held during SCL high
                 scl_drive_low <= '0';
                 phase         <= 3;
 
               when others =>
-                -- Finish the bit by pulling SCL low
+                -- pull SCL low to end the bit
                 scl_drive_low <= '1';
                 phase         <= 0;
-					 -- expect ACK from slave if done with transmitting the address byte
+                 -- byte done, expect ACK
                 if bit_index = 0 then
                   state <= RECEIVE_ACK;
                 else
@@ -210,19 +198,19 @@ begin
           when RECEIVE_ACK =>
             case phase is
               when 0 =>
-                -- Release SDA while SCL is low so the codec can ACK
+                -- release SDA so codec can ACK
                 scl_drive_low <= '1';
                 sda_drive_low <= '0';
                 ack_received  <= '0';
                 phase         <= 1;
 
               when 1 =>
-                -- Release SCL for the ACK bit.
+                -- release SCL for ACK
                 scl_drive_low <= '0';
                 phase         <= 2;
 
               when 2 =>
-                -- ACK is active low and sampled while SCL is high.
+                -- sample ACK (active-low)
                 scl_drive_low <= '0';
 
                 if i2c_sdat = '0' then
@@ -263,19 +251,19 @@ begin
           when STOP_CONDITION =>
             case phase is
               when 0 =>
-                -- Prepare STOP with SCL and SDA low.
+                -- SDA and SCL low before STOP
                 scl_drive_low <= '1';
                 sda_drive_low <= '1';
                 phase         <= 1;
 
               when 1 =>
-                -- Release SCL while SDA remains low.
+                -- release SCL, keep SDA low
                 scl_drive_low <= '0';
                 sda_drive_low <= '1';
                 phase         <= 2;
 
               when 2 =>
-                -- release SDA while SCL is high resulting STOP condition in i2c
+                -- release SDA while SCL high = STOP condition
                 scl_drive_low <= '0';
                 sda_drive_low <= '0';
                 phase         <= 3;

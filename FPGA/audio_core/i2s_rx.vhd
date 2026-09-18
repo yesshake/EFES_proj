@@ -1,27 +1,20 @@
--- ================================================================
--- I2S receiver
+-- I2S receiver — captures 16-bit samples from the WM8731.
 --
--- Receives 16-bit standard-I2S samples from the WM8731.
---
--- Assumptions:
---   * WM8731 generates BCLK and LRCLK.
---   * Serial data is sampled on the rising edge of BCLK.
---   * LRCLK changes one BCLK period before the next sample MSB.
---   * Slots may be wider than 16 bits; extra bits are ignored.
---
--- A one-BCLK-cycle valid pulse is generated after every received
--- 16-bit sample.
--- ================================================================
+-- WM8731 is I2S master (generates BCLK and LRCLK).
+-- Data sampled on rising BCLK. Standard I2S one-bit delay.
+-- Slots wider than 16 bits are ignored.
 
 library ieee;
 use ieee.std_logic_1164.all;
+
+use work.efes_pkg.all;
 
 entity i2s_rx is
   port (
     bclk       : in  std_logic;
     lrclk      : in  std_logic;
     adc_dat    : in  std_logic;
-    sample_out : out std_logic_vector(15 downto 0);
+    sample_out : out audio_sample_t;
     valid      : out std_logic
   );
 end entity i2s_rx;
@@ -41,13 +34,13 @@ architecture rtl of i2s_rx is
   signal previous_lrclk : std_logic := '0';
 
   signal shift_reg :
-    std_logic_vector(15 downto 0) := (others => '0');
+    audio_sample_t := (others => '0');
 
   signal sample_reg :
-    std_logic_vector(15 downto 0) := (others => '0');
+    audio_sample_t := (others => '0');
 
   signal bit_index :
-    natural range 0 to 15 := 15;
+    natural range 0 to AUDIO_SAMPLE_WIDTH-1 := AUDIO_SAMPLE_WIDTH-1;
 
   signal valid_reg : std_logic := '0';
 
@@ -61,54 +54,40 @@ begin
   begin
     if rising_edge(bclk) then
 
-      -- valid is asserted for only one BCLK cycle.
+      -- one-cycle pulse
       valid_reg <= '0';
 
       case state is
 
-        ------------------------------------------------------------
-        -- Capture the initial LRCLK level.
-        ------------------------------------------------------------
+        -- latch initial LRCLK level
         when SYNC_LRCLK =>
           previous_lrclk <= lrclk;
           state          <= WAIT_LRCLK_EDGE;
 
 
-        ------------------------------------------------------------
-        -- Wait for the beginning of either the left or right slot.
-        ------------------------------------------------------------
+        -- wait for a slot boundary
         when WAIT_LRCLK_EDGE =>
           if lrclk /= previous_lrclk then
             previous_lrclk <= lrclk;
-            bit_index      <= 15;
+            bit_index      <= AUDIO_SAMPLE_WIDTH-1;
             state          <= WAIT_MSB;
           end if;
 
 
-        ------------------------------------------------------------
-        -- Standard I2S inserts one BCLK delay between the LRCLK
-        -- transition and the sample MSB.
-        --
-        -- The LRCLK transition was detected on the preceding rising
-        -- edge. The MSB is captured on this rising edge.
-        ------------------------------------------------------------
+        -- I2S has one BCLK delay between LRCLK edge and first data bit
         when WAIT_MSB =>
-          shift_reg(15) <= adc_dat;
-          bit_index     <= 14;
+          shift_reg(AUDIO_SAMPLE_WIDTH-1) <= adc_dat;
+          bit_index     <= AUDIO_SAMPLE_WIDTH-2;
           state         <= RECEIVE_BITS;
 
 
-        ------------------------------------------------------------
-        -- Receive the remaining 15 sample bits, MSB first.
-        ------------------------------------------------------------
         when RECEIVE_BITS =>
           shift_reg(bit_index) <= adc_dat;
 
           if bit_index = 0 then
 
-            -- Include adc_dat directly because the signal assignment
-            -- to shift_reg(0) takes effect after this process.
-            sample_reg <= shift_reg(15 downto 1) & adc_dat;
+            -- grab adc_dat directly; shift_reg(0) hasn't updated yet
+            sample_reg <= shift_reg(AUDIO_SAMPLE_WIDTH-1 downto 1) & adc_dat;
             valid_reg  <= '1';
 
             state <= WAIT_LRCLK_EDGE;

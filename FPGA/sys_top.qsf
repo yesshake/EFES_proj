@@ -241,6 +241,7 @@ set_global_assignment -name EDA_TEST_BENCH_NAME tb_stage_1 -section_id eda_simul
 set_global_assignment -name EDA_DESIGN_INSTANCE_NAME NA -section_id tb_stage_1
 set_global_assignment -name EDA_TEST_BENCH_MODULE_NAME tb_stage_1 -section_id tb_stage_1
 set_global_assignment -name EDA_TEST_BENCH_FILE testbenches/tb_stage_1.vhd -section_id tb_stage_1
+set_global_assignment -name VHDL_FILE audio_core/efes_pkg.vhd
 set_global_assignment -name VHDL_FILE top_level/sys_top.vhd
 set_global_assignment -name VHDL_FILE ui_ctrl/settings.vhd
 set_global_assignment -name VHDL_FILE ui_ctrl/hex_display.vhd

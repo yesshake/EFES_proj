@@ -2,11 +2,13 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.efes_pkg.all;
+
 entity hex_display is
   port (
-    value     : in  std_logic_vector(3 downto 0);
-    hex_tens  : out std_logic_vector(6 downto 0);
-    hex_ones  : out std_logic_vector(6 downto 0)
+    value     : in  efx_param_t;
+    hex_tens  : out seven_seg_t;
+    hex_ones  : out seven_seg_t
   );
 end entity hex_display;
 

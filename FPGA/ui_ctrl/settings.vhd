@@ -1,10 +1,8 @@
--- ================================================================
--- 
--- ================================================================
-
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+use work.efes_pkg.all;
 
 entity settings is
   port (
@@ -17,16 +15,16 @@ entity settings is
     btn_mode : in std_logic_vector(2 downto 0);
     btn_save : in std_logic;
     
-    mcu_vol : in std_logic_vector(3 downto 0);
-    mcu_crush : in std_logic_vector(3 downto 0);
-    mcu_down : in std_logic_vector(3 downto 0);
+    mcu_vol : in efx_param_t;
+    mcu_crush : in efx_param_t;
+    mcu_down : in efx_param_t;
     mcu_rx_valid : in std_logic;
     
-    efx_vol : out std_logic_vector(3 downto 0);
-    efx_crush : out std_logic_vector(3 downto 0);
-    efx_down : out std_logic_vector(3 downto 0);
+    efx_vol : out efx_param_t;
+    efx_crush : out efx_param_t;
+    efx_down : out efx_param_t;
    
-    preset_idx : out std_logic_vector(3 downto 0);
+    preset_idx : out preset_id_t;
     save_strobe : out std_logic;
     load_strobe : out std_logic
   );
@@ -34,10 +32,10 @@ end entity settings;
 
 architecture behavioral of settings is
 
-  signal volume_reg : unsigned(3 downto 0) := (others => '1');
-  signal crush_reg  : unsigned(3 downto 0) := (others => '0');
-  signal down_reg   : unsigned(3 downto 0) := (others => '0');
-  signal preset_reg : unsigned(3 downto 0) := (others => '0');
+  signal volume_reg : unsigned(EFX_PARAM_WIDTH-1 downto 0) := (others => '1');
+  signal crush_reg  : unsigned(EFX_PARAM_WIDTH-1 downto 0) := (others => '0');
+  signal down_reg   : unsigned(EFX_PARAM_WIDTH-1 downto 0) := (others => '0');
+  signal preset_reg : unsigned(PRESET_ID_WIDTH-1 downto 0) := (others => '0');
 
   signal up_previous     : std_logic := '1';
   signal down_previous   : std_logic := '1';
@@ -87,7 +85,7 @@ begin
       save_strobe_reg <= '0';
       load_strobe_reg <= '0';
 
-      -- Future loaded preset from the STM32
+      -- apply preset from STM32 if one arrived
       if mcu_rx_valid = '1' then
         volume_reg <= unsigned(mcu_vol);
         crush_reg  <= unsigned(mcu_crush);
