@@ -94,26 +94,3 @@ The preset-management firmware has been implemented on the STM32. Integration an
 A simulation testbench (`tb_stage_1`) verifies the I2C codec configuration sequence, I2S receive/transmit, and mono audio pipeline.
 
 ## Demo
-
-A hardware demonstration will be added here.
-
-[![FPGA Audio Effects Demo](docs/images/demo_thumbnail.png)](VIDEO_URL)
-
-## Repository Structure
-
-```
-EFES_proj/
-├── FPGA/                        FPGA design (Quartus Prime project)
-│   ├── audio_core/              Audio pipeline and codec support
-│   ├── communication/           UART preset interface
-│   ├── ui_ctrl/                 Buttons, settings, and HEX displays
-│   ├── top_level/               Top-level entities and smoke tests
-│   ├── testbenches/             Simulation testbenches
-│   ├── sys_top.qsf              Pin assignments and project settings
-│   └── sys_top.sdc              Timing constraints
-│
-├── SW-flash/                    STM32L412 preset-management firmware
-│   └── audio_config_l412/
-│
-└── docs/                        Additional documentation
-```
